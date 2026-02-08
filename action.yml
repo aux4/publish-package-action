@@ -130,8 +130,7 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        PACKAGE_DIR="${{ inputs.package_directory }}"
-        PACKAGE_FILE="${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
+        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
 
         docker run --rm \
           --user $(id -u):$(id -g) \
@@ -168,8 +167,7 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        PACKAGE_DIR="${{ inputs.package_directory }}"
-        PACKAGE_FILE="${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
+        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
 
         if [ -f "${PACKAGE_FILE}" ]; then
           gh release create "v${VERSION}" \
@@ -189,5 +187,4 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        PACKAGE_DIR="${{ inputs.package_directory }}"
-        rm -f "${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
+        rm -f "${SCOPE}_${NAME}_${VERSION}.zip"
