@@ -99,6 +99,17 @@ runs:
 
         echo "::notice::Version bumped from ${CURRENT_VERSION} to ${NEW_VERSION}"
 
+    - name: Build application
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        docker run --rm \
+          -v $(pwd):/workspace \
+          -w /workspace \
+          --entrypoint aux4 \
+          ${{ inputs.publisher_image }} \
+          build || true
+
     - name: Build package
       shell: bash
       working-directory: ${{ inputs.working_directory }}
