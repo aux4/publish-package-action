@@ -115,6 +115,7 @@ runs:
       working-directory: ${{ inputs.working_directory }}
       run: |
         docker run --rm \
+          --user $(id -u):$(id -g) \
           -v $(pwd):/workspace \
           -w /workspace \
           ${{ inputs.aux4_image }} \
@@ -133,6 +134,7 @@ runs:
         PACKAGE_FILE="${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
 
         docker run --rm \
+          --user $(id -u):$(id -g) \
           -v $(pwd):/workspace \
           -w /workspace \
           -e AUX4_ACCESS_TOKEN="${AUX4_ACCESS_TOKEN}" \
