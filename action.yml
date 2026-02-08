@@ -1,0 +1,178 @@
+name: 'Publish aux4 Package'
+description: 'Build and publish an aux4 package to hub.aux4.io with GitHub release'
+author: 'aux4'
+
+branding:
+  icon: 'package'
+  color: 'gray-dark'
+
+inputs:
+  level:
+    description: 'Release level (patch, minor, major)'
+    required: false
+    default: 'patch'
+  aux4_token:
+    description: 'aux4 access token for publishing to hub.aux4.io'
+    required: true
+  github_token:
+    description: 'GitHub token for creating releases'
+    required: true
+  working_directory:
+    description: 'Working directory containing the package'
+    required: false
+    default: '.'
+  publisher_image:
+    description: 'Docker image for aux4 publisher'
+    required: false
+    default: 'aux4/publisher:latest'
+
+outputs:
+  version:
+    description: 'The new package version'
+    value: ${{ steps.version.outputs.version }}
+  scope:
+    description: 'The package scope'
+    value: ${{ steps.version.outputs.scope }}
+  name:
+    description: 'The package name'
+    value: ${{ steps.version.outputs.name }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure git
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Pull latest changes
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        git pull --rebase origin ${{ github.ref_name }}
+
+    - name: Get current package info
+      id: current
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        SCOPE=$(jq -r '.scope' .aux4)
+        NAME=$(jq -r '.name' .aux4)
+        CURRENT_VERSION=$(jq -r '.version' .aux4)
+        echo "scope=${SCOPE}" >> $GITHUB_OUTPUT
+        echo "name=${NAME}" >> $GITHUB_OUTPUT
+        echo "current_version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Increment version
+      id: version
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        CURRENT_VERSION="${{ steps.current.outputs.current_version }}"
+        LEVEL="${{ inputs.level }}"
+
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+        case "$LEVEL" in
+          major)
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            ;;
+          minor)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            ;;
+          patch)
+            PATCH=$((PATCH + 1))
+            ;;
+        esac
+
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+        echo "scope=${{ steps.current.outputs.scope }}" >> $GITHUB_OUTPUT
+        echo "name=${{ steps.current.outputs.name }}" >> $GITHUB_OUTPUT
+
+        # Update .aux4 file
+        jq --arg v "$NEW_VERSION" '.version = $v' .aux4 > .aux4.tmp && mv .aux4.tmp .aux4
+
+        echo "::notice::Version bumped from ${CURRENT_VERSION} to ${NEW_VERSION}"
+
+    - name: Build package
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        docker run --rm \
+          -v $(pwd):/workspace \
+          -w /workspace \
+          --entrypoint aux4 \
+          ${{ inputs.publisher_image }} \
+          aux4 pkger build .
+
+    - name: Publish to hub.aux4.io
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        AUX4_ACCESS_TOKEN: ${{ inputs.aux4_token }}
+      run: |
+        SCOPE="${{ steps.current.outputs.scope }}"
+        NAME="${{ steps.current.outputs.name }}"
+        VERSION="${{ steps.version.outputs.version }}"
+        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
+
+        docker run --rm \
+          -v $(pwd):/workspace \
+          -w /workspace \
+          -e AUX4_ACCESS_TOKEN="${AUX4_ACCESS_TOKEN}" \
+          --entrypoint aux4 \
+          ${{ inputs.publisher_image }} \
+          aux4 pkger publish "${PACKAGE_FILE}"
+
+    - name: Commit and tag
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+
+        git add .aux4
+        git commit -m "release: ${VERSION}"
+        git tag -a "v${VERSION}" -m "release: v${VERSION}"
+
+    - name: Push changes and tags
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        git push origin ${{ github.ref_name }}
+        git push origin --tags
+
+    - name: Create GitHub Release
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        SCOPE="${{ steps.current.outputs.scope }}"
+        NAME="${{ steps.current.outputs.name }}"
+        VERSION="${{ steps.version.outputs.version }}"
+        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
+
+        if [ -f "${PACKAGE_FILE}" ]; then
+          gh release create "v${VERSION}" \
+            "${PACKAGE_FILE}" \
+            --title "Release v${VERSION}" \
+            --notes "Release of ${SCOPE}/${NAME} v${VERSION}"
+        else
+          gh release create "v${VERSION}" \
+            --title "Release v${VERSION}" \
+            --notes "Release of ${SCOPE}/${NAME} v${VERSION}"
+        fi
+
+    - name: Cleanup
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        SCOPE="${{ steps.current.outputs.scope }}"
+        NAME="${{ steps.current.outputs.name }}"
+        VERSION="${{ steps.version.outputs.version }}"
+        rm -f "${SCOPE}_${NAME}_${VERSION}.zip"
