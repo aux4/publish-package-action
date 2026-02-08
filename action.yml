@@ -119,23 +119,12 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
-        echo "::group::Package directory contents"
-        ls -la ${{ inputs.package_directory }}/
-        echo "::endgroup::"
-
         docker run --rm \
           --user $(id -u):$(id -g) \
           -v $(pwd):/workspace \
           -w /workspace \
           ${{ inputs.aux4_image }} \
           aux4 pkger build ${{ inputs.package_directory }}
-
-        echo "::group::Generated package contents"
-        SCOPE=$(jq -r '.scope' "${{ inputs.package_directory }}/.aux4")
-        NAME=$(jq -r '.name' "${{ inputs.package_directory }}/.aux4")
-        VERSION=$(jq -r '.version' "${{ inputs.package_directory }}/.aux4")
-        unzip -l "${SCOPE}_${NAME}_${VERSION}.zip" || echo "Could not list zip contents"
-        echo "::endgroup::"
 
     - name: Publish to hub.aux4.io
       shell: bash
