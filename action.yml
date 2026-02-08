@@ -137,8 +137,9 @@ runs:
         VERSION="${{ steps.version.outputs.version }}"
         PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
 
-        # Debug: Check if token is set (shows length, not value)
-        echo "Token length: ${#AUX4_ACCESS_TOKEN}"
+        # Trim any whitespace/newlines from token
+        AUX4_ACCESS_TOKEN=$(echo -n "$AUX4_ACCESS_TOKEN" | tr -d '[:space:]')
+        echo "Token length after trim: ${#AUX4_ACCESS_TOKEN}"
 
         docker run --rm \
           --user $(id -u):$(id -g) \
@@ -147,7 +148,7 @@ runs:
           -e AUX4_ACCESS_TOKEN="${AUX4_ACCESS_TOKEN}" \
           --entrypoint sh \
           ${{ inputs.aux4_image }} \
-          -c 'echo "Token in container: ${#AUX4_ACCESS_TOKEN} chars" && echo "Installed packages:" && aux4 aux4 pkger list && aux4 aux4 pkger publish "'"${PACKAGE_FILE}"'"'
+          -c 'echo "Token in container: ${#AUX4_ACCESS_TOKEN} chars" && aux4 aux4 pkger publish "'"${PACKAGE_FILE}"'"'
 
     - name: Commit and tag
       shell: bash
