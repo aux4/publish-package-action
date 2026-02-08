@@ -110,6 +110,11 @@ runs:
 
         echo "::notice::Version bumped from ${CURRENT_VERSION} to ${NEW_VERSION}"
 
+    - name: Pull latest aux4 image
+      shell: bash
+      run: |
+        docker pull ${{ inputs.aux4_image }}
+
     - name: Build package
       shell: bash
       working-directory: ${{ inputs.working_directory }}
