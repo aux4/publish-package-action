@@ -18,13 +18,17 @@ inputs:
     description: 'GitHub token for creating releases'
     required: true
   working_directory:
-    description: 'Working directory containing the package'
+    description: 'Working directory containing the repository'
     required: false
     default: '.'
-  publisher_image:
-    description: 'Docker image for aux4 publisher'
+  package_directory:
+    description: 'Directory containing the package .aux4 file'
     required: false
-    default: 'aux4/publisher:latest'
+    default: 'package'
+  aux4_image:
+    description: 'Docker image for aux4'
+    required: false
+    default: 'aux4/aux4:latest'
 
 outputs:
   version:
@@ -57,18 +61,25 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
-        SCOPE=$(jq -r '.scope' .aux4)
-        NAME=$(jq -r '.name' .aux4)
-        CURRENT_VERSION=$(jq -r '.version' .aux4)
+        PACKAGE_AUX4="${{ inputs.package_directory }}/.aux4"
+        if [ ! -f "$PACKAGE_AUX4" ]; then
+          echo "::error::Package metadata not found at ${PACKAGE_AUX4}"
+          exit 1
+        fi
+        SCOPE=$(jq -r '.scope' "$PACKAGE_AUX4")
+        NAME=$(jq -r '.name' "$PACKAGE_AUX4")
+        CURRENT_VERSION=$(jq -r '.version' "$PACKAGE_AUX4")
         echo "scope=${SCOPE}" >> $GITHUB_OUTPUT
         echo "name=${NAME}" >> $GITHUB_OUTPUT
         echo "current_version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+        echo "::notice::Found package ${SCOPE}/${NAME} at version ${CURRENT_VERSION}"
 
     - name: Increment version
       id: version
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
+        PACKAGE_AUX4="${{ inputs.package_directory }}/.aux4"
         CURRENT_VERSION="${{ steps.current.outputs.current_version }}"
         LEVEL="${{ inputs.level }}"
 
@@ -94,21 +105,10 @@ runs:
         echo "scope=${{ steps.current.outputs.scope }}" >> $GITHUB_OUTPUT
         echo "name=${{ steps.current.outputs.name }}" >> $GITHUB_OUTPUT
 
-        # Update .aux4 file
-        jq --arg v "$NEW_VERSION" '.version = $v' .aux4 > .aux4.tmp && mv .aux4.tmp .aux4
+        # Update package/.aux4 file
+        jq --arg v "$NEW_VERSION" '.version = $v' "$PACKAGE_AUX4" > "${PACKAGE_AUX4}.tmp" && mv "${PACKAGE_AUX4}.tmp" "$PACKAGE_AUX4"
 
         echo "::notice::Version bumped from ${CURRENT_VERSION} to ${NEW_VERSION}"
-
-    - name: Build application
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}
-      run: |
-        docker run --rm \
-          -v $(pwd):/workspace \
-          -w /workspace \
-          --entrypoint aux4 \
-          ${{ inputs.publisher_image }} \
-          build || true
 
     - name: Build package
       shell: bash
@@ -117,9 +117,8 @@ runs:
         docker run --rm \
           -v $(pwd):/workspace \
           -w /workspace \
-          --entrypoint aux4 \
-          ${{ inputs.publisher_image }} \
-          aux4 pkger build .
+          ${{ inputs.aux4_image }} \
+          aux4 pkger build ${{ inputs.package_directory }}
 
     - name: Publish to hub.aux4.io
       shell: bash
@@ -130,14 +129,14 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
+        PACKAGE_DIR="${{ inputs.package_directory }}"
+        PACKAGE_FILE="${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
 
         docker run --rm \
           -v $(pwd):/workspace \
           -w /workspace \
           -e AUX4_ACCESS_TOKEN="${AUX4_ACCESS_TOKEN}" \
-          --entrypoint aux4 \
-          ${{ inputs.publisher_image }} \
+          ${{ inputs.aux4_image }} \
           aux4 pkger publish "${PACKAGE_FILE}"
 
     - name: Commit and tag
@@ -145,8 +144,9 @@ runs:
       working-directory: ${{ inputs.working_directory }}
       run: |
         VERSION="${{ steps.version.outputs.version }}"
+        PACKAGE_AUX4="${{ inputs.package_directory }}/.aux4"
 
-        git add .aux4
+        git add "$PACKAGE_AUX4"
         git commit -m "release: ${VERSION}"
         git tag -a "v${VERSION}" -m "release: v${VERSION}"
 
@@ -166,7 +166,8 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        PACKAGE_FILE="${SCOPE}_${NAME}_${VERSION}.zip"
+        PACKAGE_DIR="${{ inputs.package_directory }}"
+        PACKAGE_FILE="${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"
 
         if [ -f "${PACKAGE_FILE}" ]; then
           gh release create "v${VERSION}" \
@@ -186,4 +187,5 @@ runs:
         SCOPE="${{ steps.current.outputs.scope }}"
         NAME="${{ steps.current.outputs.name }}"
         VERSION="${{ steps.version.outputs.version }}"
-        rm -f "${SCOPE}_${NAME}_${VERSION}.zip"
+        PACKAGE_DIR="${{ inputs.package_directory }}"
+        rm -f "${PACKAGE_DIR}/${SCOPE}_${NAME}_${VERSION}.zip"

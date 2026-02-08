@@ -4,13 +4,14 @@ A GitHub Action to build and publish aux4 packages to hub.aux4.io with automatic
 
 ## Usage
 
+### Go package example
+
 ```yaml
 name: Publish Package
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
     inputs:
       level:
@@ -18,10 +19,10 @@ on:
         required: true
         default: 'patch'
         type: choice
-        options:
-          - patch
-          - minor
-          - major
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
 
 jobs:
   publish:
@@ -31,11 +32,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build
+        run: aux4 build
+
       - uses: aux4/publish-package-action@v1
         with:
           level: ${{ inputs.level || 'patch' }}
           aux4_token: ${{ secrets.AUX4_ACCESS_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Simple package (no build required)
+
+```yaml
+- uses: aux4/publish-package-action@v1
+  with:
+    level: patch
+    aux4_token: ${{ secrets.AUX4_ACCESS_TOKEN }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Inputs
@@ -45,8 +63,9 @@ jobs:
 | `level` | Release level (patch, minor, major) | No | `patch` |
 | `aux4_token` | aux4 access token for publishing to hub.aux4.io | Yes | - |
 | `github_token` | GitHub token for creating releases | Yes | - |
-| `working_directory` | Working directory containing the package | No | `.` |
-| `publisher_image` | Docker image for aux4 publisher | No | `aux4/publisher:latest` |
+| `working_directory` | Working directory containing the repository | No | `.` |
+| `package_directory` | Directory containing the package .aux4 file | No | `package` |
+| `aux4_image` | Docker image for aux4 | No | `aux4/aux4:latest` |
 
 ## Outputs
 
@@ -56,21 +75,50 @@ jobs:
 | `scope` | The package scope |
 | `name` | The package name |
 
+## Directory Structure
+
+```
+your-repo/
+├── .aux4              # (optional) Build commands
+├── package/
+│   └── .aux4          # Package metadata (scope, name, version)
+│   └── dist/          # Built artifacts (binaries, etc.)
+└── ...
+```
+
+The `package/.aux4` must contain:
+```json
+{
+  "scope": "your-scope",
+  "name": "your-package",
+  "version": "1.0.0"
+}
+```
+
 ## What it does
 
-1. Pulls latest changes from the branch
-2. Increments the version in `.aux4` based on the level
-3. Builds the package using `aux4 pkger build`
-4. Publishes to hub.aux4.io using `aux4 pkger publish`
-5. Commits the version change and creates a git tag
-6. Pushes changes and tags to the repository
-7. Creates a GitHub Release with the package artifact
+1. Pulls latest changes
+2. Reads package metadata from `package/.aux4`
+3. Increments version based on level
+4. Runs `aux4 pkger build` to create package zip
+5. Runs `aux4 pkger publish` to publish to hub.aux4.io
+6. Commits version change and creates git tag
+7. Pushes to repository
+8. Creates GitHub Release with package artifact
 
-## Requirements
+## Workflow
 
-- The repository must have an `.aux4` file with `scope`, `name`, and `version` fields
-- The `AUX4_ACCESS_TOKEN` secret must be configured
-- The workflow must have `contents: write` permission
+Your workflow handles the build, this action handles the rest:
+
+```
+[Your Build Step] → [publish-package-action]
+     ↓                      ↓
+  go build              version bump
+  npm build             pkger build
+  cargo build           pkger publish
+  etc.                  git tag
+                        gh release
+```
 
 ## License
 
