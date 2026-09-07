@@ -40,6 +40,9 @@ outputs:
   name:
     description: 'The package name'
     value: ${{ steps.version.outputs.name }}
+  paid:
+    description: 'Whether the package is paid (ships a package/plans.json)'
+    value: ${{ steps.plans.outputs.paid }}
 
 runs:
   using: 'composite'
@@ -77,6 +80,46 @@ runs:
         echo "private=${PRIVATE}" >> $GITHUB_OUTPUT
         echo "repository=${REPOSITORY}" >> $GITHUB_OUTPUT
         echo "::notice::Found package ${SCOPE}/${NAME} at version ${CURRENT_VERSION} (private: ${PRIVATE})"
+
+    - name: Validate plans.json
+      id: plans
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        PLANS_FILE="${{ inputs.package_directory }}/plans.json"
+
+        # PAID-057 (A1): a package is paid iff it ships package/plans.json. No file
+        # => nothing to validate, package is not paid.
+        if [ ! -f "$PLANS_FILE" ]; then
+          echo "paid=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::No plans.json found — package is not paid"
+          exit 0
+        fi
+
+        # Guard on stderr, not exit code: some jq builds return 0 on parse errors.
+        JSON_ERR="$(jq empty "$PLANS_FILE" 2>&1 >/dev/null)"
+        if [ -n "$JSON_ERR" ]; then
+          echo "::error::plans.json is not valid JSON: ${JSON_ERR}"
+          exit 1
+        fi
+
+        SCOPE="${{ steps.current.outputs.scope }}"
+        NAME="${{ steps.current.outputs.name }}"
+        EXPECTED_PRODUCT="PKG:${SCOPE}/${NAME}"
+
+        # Fast-fail pre-flight; the hub API (src/lib/PackagePlans.js) is authoritative.
+        ERRORS="$(jq -r --arg product "$EXPECTED_PRODUCT" -f "$GITHUB_ACTION_PATH/validate-plans.jq" "$PLANS_FILE")"
+
+        if [ -n "$ERRORS" ]; then
+          echo "::error::Invalid plans.json — publish rejected:"
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error::$line"
+          done <<< "$ERRORS"
+          exit 1
+        fi
+
+        echo "paid=true" >> "$GITHUB_OUTPUT"
+        echo "::notice::Valid plans.json — package is paid (${EXPECTED_PRODUCT})"
 
     - name: Increment version
       id: version
