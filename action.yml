@@ -99,12 +99,8 @@ runs:
           exit 1
         fi
 
-        SCOPE="${{ steps.current.outputs.scope }}"
-        NAME="${{ steps.current.outputs.name }}"
-        EXPECTED_PRODUCT="PKG:${SCOPE}/${NAME}"
-
         # Fast-fail pre-flight; the hub API (src/lib/PackagePlans.js) is authoritative.
-        ERRORS="$(jq -r --arg product "$EXPECTED_PRODUCT" -f "$GITHUB_ACTION_PATH/validate-plans.jq" "$PLANS_FILE")"
+        ERRORS="$(jq -r -f "$GITHUB_ACTION_PATH/validate-plans.jq" "$PLANS_FILE")"
 
         if [ -n "$ERRORS" ]; then
           echo "::error::Invalid plans.json — publish rejected:"
@@ -115,7 +111,7 @@ runs:
         fi
 
         echo "paid=true" >> "$GITHUB_OUTPUT"
-        echo "::notice::Valid plans.json — package is paid (${EXPECTED_PRODUCT})"
+        echo "::notice::Valid plans.json — package is paid"
 
     - name: Increment version
       id: version

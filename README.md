@@ -85,13 +85,17 @@ publisher UI; it must never appear in `plans.json`.
 
 ```json
 {
-  "product": "PKG:your-scope/your-package",
-  "meters": { "schedule": { "unit": "schedule" } },
+  "schemaVersion": 1,
+  "metrics": {
+    "clown-fish": {
+      "label": "Clown fish"
+    }
+  },
   "plans": {
-    "dev": {
-      "type": "subscription",
-      "interval": "monthly",
-      "meters": { "schedule": { "limit": 10 } }
+    "default": {
+      "limits": {
+        "clown-fish": 10
+      }
     }
   }
 }
@@ -99,18 +103,15 @@ publisher UI; it must never appear in `plans.json`.
 
 Validation rules (each rejects the publish with a clear message):
 
-- `product` must be a non-empty string equal to `PKG:<scope>/<name>` for the package.
-- Meter names must be lowercase and contain no spaces.
+- `schemaVersion` must be `1`.
+- Metric keys use lowercase letters, numbers, `-`, or `_`, with a maximum of 64 characters.
+- Every metric has a non-empty human label of at most 80 characters.
 - The `plans` map must contain exactly one plan in v1 (the map format is retained).
-- Each plan `type` is `subscription` or `on-demand`.
-- A `subscription` requires `interval` of `monthly` or `once`; an `on-demand` plan must not
-  declare an `interval`.
-- `interval: "once"` combined with any meter is rejected — a one-time purchase cannot meter usage.
-- A plan meter must be declared in top-level `meters`; a `limit` must be an integer
-  (`-1` = unlimited, `0` = none). Quota limits are enforced server-side, not here.
+- Every plan assigns a limit to every declared metric and cannot reference an undeclared metric.
+- Limits are integers (`-1` = unlimited, `0` = disabled, positive = allowed quantity).
 
 This is a fast-fail CI pre-flight (see `validate-plans.jq`); the hub API is the authoritative
-validator and stores the shape immutably per published version.
+validator. Hub stores the shape immutably per version and projects the latest version for Billing.
 
 ## Directory Structure
 
