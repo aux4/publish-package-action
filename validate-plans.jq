@@ -26,8 +26,15 @@ def validkey: test("^[a-z0-9][a-z0-9_-]{0,63}$");
      | .key as $planKey | .value as $plan
      | if ($planKey|validkey|not) then "plans.json plan key '\($planKey)' is invalid"
        elif ($plan|isobj|not) then "plans.json plan '\($planKey)' must be an object"
-       else (((($plan|keys) - ["limits"])) as $u
+       else (((($plan|keys) - ["limits","price"])) as $u
          | if ($u|length) > 0 then "plans.json plan '\($planKey)' has unknown key(s): " + ($u|join(", ")) else empty end),
+         if ($plan.price|isobj|not) then "plans.json plan '\($planKey)' 'price' must be an object"
+         else (((($plan.price|keys) - ["monthly"])) as $u
+           | if ($u|length) > 0 then "plans.json plan '\($planKey)' 'price' has unknown key(s): " + ($u|join(", ")) else empty end),
+           if (($plan.price.monthly|type) != "number") or ($plan.price.monthly <= 0)
+           then "plans.json plan '\($planKey)' 'price.monthly' must be a positive number"
+           else empty end
+         end,
          if ($plan.limits|isobj|not) then "plans.json plan '\($planKey)' 'limits' must be an object"
          else ($plan.limits | to_entries[]
            | .key as $metricKey | .value as $limit

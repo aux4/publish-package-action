@@ -79,9 +79,10 @@ jobs:
 ## Paid packages (`plans.json`)
 
 A package is **paid** if and only if it ships a `package/plans.json`. When present, the
-action validates its **shape** before publishing and fails the build with a clear message
-if it is invalid. It captures shape only — never price. Price is set separately in the hub
-publisher UI; it must never appear in `plans.json`.
+action validates it before publishing and fails the build with a clear message if it is
+invalid. The latest published document is the source of truth for the package's metric
+labels, limits, and public price. Stripe identifiers and checkout URLs are configured
+separately; they do not define the displayed price.
 
 ```json
 {
@@ -93,6 +94,7 @@ publisher UI; it must never appear in `plans.json`.
   },
   "plans": {
     "default": {
+      "price": { "monthly": 1 },
       "limits": {
         "clown-fish": 10
       }
@@ -107,11 +109,12 @@ Validation rules (each rejects the publish with a clear message):
 - Metric keys use lowercase letters, numbers, `-`, or `_`, with a maximum of 64 characters.
 - Every metric has a non-empty human label of at most 80 characters.
 - The `plans` map must contain exactly one plan in v1 (the map format is retained).
+- Every plan has a positive USD monthly price in `price.monthly`.
 - Every plan assigns a limit to every declared metric and cannot reference an undeclared metric.
 - Limits are integers (`-1` = unlimited, `0` = disabled, positive = allowed quantity).
 
 This is a fast-fail CI pre-flight (see `validate-plans.jq`); the hub API is the authoritative
-validator. Hub stores the shape immutably per version and projects the latest version for Billing.
+validator. Hub stores the document immutably per version and projects the latest version for Billing.
 
 ## Directory Structure
 
