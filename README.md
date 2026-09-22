@@ -88,15 +88,22 @@ separately; they do not define the displayed price.
 {
   "schemaVersion": 1,
   "metrics": {
-    "clown-fish": {
-      "label": "Clown fish"
+    "storage-bytes": {
+      "label": "Cloud file storage per user",
+      "type": "gauge",
+      "unit": {
+        "base": "byte",
+        "display": "GB",
+        "baseUnitsPerDisplayUnit": 1000000000,
+        "decimals": 2
+      }
     }
   },
   "plans": {
-    "default": {
+    "small": {
       "price": { "monthly": 1 },
       "limits": {
-        "clown-fish": 10
+        "storage-bytes": 10
       }
     }
   }
@@ -108,10 +115,14 @@ Validation rules (each rejects the publish with a clear message):
 - `schemaVersion` must be `1`.
 - Metric keys use lowercase letters, numbers, `-`, or `_`, with a maximum of 64 characters.
 - Every metric has a non-empty human label of at most 80 characters.
-- The `plans` map must contain exactly one plan in v1 (the map format is retained).
+- A metric may declare `type` as `counter` or `gauge` (`counter` is the default).
+- Optional `unit` metadata declares the canonical base unit, display unit, positive integer
+  conversion factor, and 0–6 display decimals. Plan limits remain authored in display units.
+- The `plans` map must contain at least one plan.
 - Every plan has a positive USD monthly price in `price.monthly`.
 - Every plan assigns a limit to every declared metric and cannot reference an undeclared metric.
-- Limits are integers (`-1` = unlimited, `0` = disabled, positive = allowed quantity).
+- Limits are integers (`-1` = unlimited, `0` = disabled, positive = allowed quantity) and
+  must remain within JavaScript's safe-integer range after unit conversion.
 
 This is a fast-fail CI pre-flight (see `validate-plans.jq`); the hub API is the authoritative
 validator. Hub stores the document immutably per version and projects the latest version for Billing.
