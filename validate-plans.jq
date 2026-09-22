@@ -13,10 +13,12 @@ def validkey: test("^[a-z0-9][a-z0-9_-]{0,63}$");
    else (.metrics | to_entries[]
      | if (.key|validkey|not) then "plans.json metric key '\(.key)' is invalid" else empty end,
        if (.value|isobj|not) then "plans.json metric '\(.key)' must be an object"
-       else (((.value|keys) - ["label"]) as $u
+       else (((.value|keys) - ["label","type"]) as $u
          | if ($u|length) > 0 then "plans.json metric '\(.key)' has unknown key(s): " + ($u|join(", ")) else empty end),
          if ((.value.label|type) != "string") or ((.value.label|gsub("^\\s+|\\s+$";"")|length) == 0) or ((.value.label|length) > 80)
-         then "plans.json metric '\(.key)' 'label' must be a non-empty string of at most 80 characters" else empty end
+         then "plans.json metric '\(.key)' 'label' must be a non-empty string of at most 80 characters" else empty end,
+         if (.value.type != null) and (.value.type != "counter") and (.value.type != "gauge")
+         then "plans.json metric '\(.key)' 'type' must be 'counter' or 'gauge'" else empty end
        end)
    end),
   (if (.plans|isobj|not) then "plans.json 'plans' must be an object"
