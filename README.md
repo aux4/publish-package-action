@@ -74,6 +74,58 @@ jobs:
 | `version` | The new package version |
 | `scope` | The package scope |
 | `name` | The package name |
+| `paid` | Whether the package is paid (`true` if it ships a `package/plans.json`, else `false`) |
+
+## Paid packages (`plans.json`)
+
+A package is **paid** if and only if it ships a `package/plans.json`. When present, the
+action validates it before publishing and fails the build with a clear message if it is
+invalid. The latest published document is the source of truth for the package's metric
+labels, limits, and public price. Stripe identifiers and checkout URLs are configured
+separately; they do not define the displayed price.
+
+```json
+{
+  "schemaVersion": 1,
+  "metrics": {
+    "storage-bytes": {
+      "label": "Cloud file storage per user",
+      "type": "gauge",
+      "unit": {
+        "base": "byte",
+        "display": "GB",
+        "baseUnitsPerDisplayUnit": 1000000000,
+        "decimals": 2
+      }
+    }
+  },
+  "plans": {
+    "small": {
+      "price": { "monthly": 1 },
+      "limits": {
+        "storage-bytes": 10
+      }
+    }
+  }
+}
+```
+
+Validation rules (each rejects the publish with a clear message):
+
+- `schemaVersion` must be `1`.
+- Metric keys use lowercase letters, numbers, `-`, or `_`, with a maximum of 64 characters.
+- Every metric has a non-empty human label of at most 80 characters.
+- A metric may declare `type` as `counter` or `gauge` (`counter` is the default).
+- Optional `unit` metadata declares the canonical base unit, display unit, positive integer
+  conversion factor, and 0–6 display decimals. Plan limits remain authored in display units.
+- The `plans` map must contain at least one plan.
+- Every plan has a positive USD monthly price in `price.monthly`.
+- Every plan assigns a limit to every declared metric and cannot reference an undeclared metric.
+- Limits are integers (`-1` = unlimited, `0` = disabled, positive = allowed quantity) and
+  must remain within JavaScript's safe-integer range after unit conversion.
+
+This is a fast-fail CI pre-flight (see `validate-plans.jq`); the hub API is the authoritative
+validator. Hub stores the document immutably per version and projects the latest version for Billing.
 
 ## Directory Structure
 
@@ -99,12 +151,13 @@ The `package/.aux4` must contain:
 
 1. Pulls latest changes
 2. Reads package metadata from `package/.aux4`
-3. Increments version based on level
-4. Runs `aux4 pkger build` to create package zip
-5. Runs `aux4 pkger publish` to publish to hub.aux4.io
-6. Commits version change and creates git tag
-7. Pushes to repository
-8. Creates GitHub Release with package artifact
+3. Validates `package/plans.json` shape if present (paid packages) and sets the `paid` output
+4. Increments version based on level
+5. Runs `aux4 pkger build` to create package zip
+6. Runs `aux4 pkger publish` to publish to hub.aux4.io
+7. Commits version change and creates git tag
+8. Pushes to repository
+9. Creates GitHub Release with package artifact
 
 ## Workflow
 
